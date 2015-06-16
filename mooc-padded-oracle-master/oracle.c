@@ -19,7 +19,7 @@ int Oracle_Connect() {
 
   bzero(&servaddr, sizeof(servaddr));
   servaddr.sin_family = AF_INET;
-  servaddr.sin_addr.s_addr=inet_addr("10.46.118.128");//54.165.60.84
+  servaddr.sin_addr.s_addr=inet_addr("54.165.60.84");//54.165.60.84//10.46.118.128
   servaddr.sin_port=htons(6667);
 
   if(!connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr))) {
