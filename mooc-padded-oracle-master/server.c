@@ -24,7 +24,8 @@
 #include "cbc-decrypt.h"
 #include <pthread.h>
 #include <time.h>
-#include <syscall.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 
 #define CTEXT_LEN 48
 #define BUF_SIZE 4096
@@ -115,7 +116,7 @@ void * connection_handler(void *sd) {
     int sock = *(int *) sd;
     pthread_t my_id = pthread_self();
 
-    printf("[%s] New thread (tid=%lu) spawned successfully.\n", get_time(), syscall(SYS_gettid));
+   // printf("[%s] New thread (tid=%lu) spawned successfully.\n", get_time(), syscall(SYS_gettid));
     fflush(stdout);
 
     bzero(&buf, BUF_SIZE);
@@ -144,7 +145,7 @@ void * connection_handler(void *sd) {
       // clear buffer for next read
       bzero(&buf, BUF_SIZE);
     }
-    printf("[%s] Client disconnected. Shutting down thread (tid=%lu)\n", get_time(), syscall(SYS_gettid));
+ //   printf("[%s] Client disconnected. Shutting down thread (tid=%lu)\n", get_time(), syscall(SYS_gettid));
     fflush(stdout);
 
     if (close(sock) < 0) {

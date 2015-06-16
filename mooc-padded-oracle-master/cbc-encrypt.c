@@ -10,7 +10,7 @@
 #include "aes.h"
 #include <stdio.h>
 
-main(){
+int main(){
   unsigned char MBlock[16];
   unsigned char CBlock_prev[16];
   unsigned char CBlock_cur[16];
@@ -29,7 +29,7 @@ main(){
   randfile = fopen("/dev/random", "r");
 
   for (i=0; i<=15; i++)
-    fscanf(fpKey, "%2X", &Key[i]);
+    fscanf(fpKey, "%2X", (unsigned int *)&Key[i]);
 
   fclose(fpKey);
 

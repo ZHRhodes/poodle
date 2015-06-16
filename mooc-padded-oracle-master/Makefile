@@ -1,20 +1,32 @@
+all : sample
+all : server
+COM = gcc
 cbc-encrypt: aes_core.o cbc-encrypt.o
-	gcc -o cbc-encrypt cbc-encrypt.o aes_core.o; rm cbc-encrypt.o
+	$(COM) -o cbc-encrypt cbc-encrypt.o aes_core.o; rm cbc-encrypt.o
 
 cbc-encrypt.o:
-	gcc -c cbc-encrypt.c
+	$(COM) -c cbc-encrypt.c
 
 aes_core.o:
-	gcc -c aes_core.c
+	$(COM)  -c aes_core.c
 
 sample: sample.o oracle.o
-	gcc -g -o sample oracle.o sample.o; rm sample.o
+	$(COM)  -g -o sample oracle.o sample.o; rm sample.o
 
 sample.o: sample.c
-	gcc -g -c sample.c
+	$(COM)  -g -c sample.c
 
 oracle.o: oracle.c oracle.h
-	gcc -g -c oracle.c
+	$(COM)  -g -c oracle.c
+
+server : server.o cbc-decrypt.o aes_core.o
+	$(COM) -o server server.o cbc-decrypt.o  aes_core.o
+
+server.o: server.c 
+	$(COM) -c server.c
+
+cbc-decrypt.o: cbc-decrypt.c cbc-decrypt.h aes.h
+	$(COM) -c cbc-decrypt.c
 
 clean:
 	rm -rf *.o sample
