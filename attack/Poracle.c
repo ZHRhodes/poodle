@@ -1,3 +1,4 @@
+#include "Poracle.h"
 
 #include <string.h>
 #include <sys/socket.h>
@@ -14,6 +15,7 @@
 #define NOFLAGS 0
 #define BLOCK_LENGTH 16
 
+/*
 int Oracle_Send(unsigned char* ctext, int num_blocks, int &sockfd);
 int Oracle_Connect(int &sockfd);
 int Oracle_Disconnect(int &sockfd);
@@ -23,8 +25,9 @@ void decrypt_block(unsigned char* buff, int failed_decrypt_byte, int &sockfd);
 int findDecryptBreak(unsigned char * buff, int &sockfd);
 void changeByteRange(unsigned char* buff, int offset, int length, unsigned char xor_value);
 
+*/
+
 int main(int argc, char* argv[]) {
-	int sockfd;
   	unsigned char ctext[48]; // allocate space for 48 bytes, i.e., 3 blocks
   	unsigned char plaintext_char;
   	int i, tmp, ret, k;
@@ -47,19 +50,19 @@ int main(int argc, char* argv[]) {
 
   	fclose(fpIn);
 
-  	Oracle_Connect(sockfd);
+  	Oracle_Connect();
 
-  	failed_on_byte = findDecryptBreak(ctext, sockfd);
+  	failed_on_byte = findDecryptBreak(ctext);
   	printf("Failed to decrypt on %d\n", failed_on_byte);
-  	Oracle_Disconnect(sockfd);
+  	Oracle_Disconnect();
 
-  	decrypt_block(ctext, 16, sockfd);
-  	decrypt_block(ctext + 16, failed_on_byte - 16, sockfd);
+  	decrypt_block(ctext, 16);
+  	decrypt_block(ctext + 16, failed_on_byte - 16);
 
 	return 0;
 }
 
-int Oracle_Connect(int &sockfd) {
+int Oracle_Connect() {
 	struct sockaddr_in servaddr, cliaddr;
   	int rc;
   
@@ -80,7 +83,7 @@ int Oracle_Connect(int &sockfd) {
   	}
 }
 
-int Oracle_Disconnect(int &sockfd) {
+int Oracle_Disconnect() {
 	
   	if(!close(sockfd)) {
     	printf("Connection closed successfully.\n");
@@ -92,7 +95,7 @@ int Oracle_Disconnect(int &sockfd) {
 }
 
 // Packet Structure: < num_blocks(1) || ciphertext(16*num_blocks) || null-terminator(1) >
-int Oracle_Send(unsigned char* ctext, int num_blocks, int &sockfd) {
+int Oracle_Send(unsigned char* ctext, int num_blocks) {
 	 
   	int ctext_len = num_blocks * BLOCK_LENGTH;
   	unsigned char message[(ctext_len)+2];
@@ -122,7 +125,7 @@ void changeByteRange(unsigned char* buff, int offset, int length, unsigned char 
    	}
 }
 
-int findDecryptBreak(unsigned char * buff, int &sockfd) {
+int findDecryptBreak(unsigned char * buff) {
   	unsigned char buff_cpy[48];
   	int ret, byte_index;
 
@@ -134,7 +137,7 @@ int findDecryptBreak(unsigned char * buff, int &sockfd) {
     	memcpy(buff_cpy, buff, 48);
     	modifyCipherText(buff_cpy, byte_index);
 
-    	ret = Oracle_Send(buff_cpy, 3, sockfd); // the first argument is an unsigned char array ctext;
+    	ret = Oracle_Send(buff_cpy, 3); // the first argument is an unsigned char array ctet;
                                // the second argument indicates how many blocks ctext has
     	if (ret < 1) {
       		printf("Failed decrypt after modifying byte position: %d\n", byte_index);
@@ -145,7 +148,7 @@ int findDecryptBreak(unsigned char * buff, int &sockfd) {
   	return byte_index;
 }
 
-void decrypt_block(unsigned char* buff, int failed_decrypt_byte, int &sockfd) {
+void decrypt_block(unsigned char* buff, int failed_decrypt_byte) {
   	unsigned char plaintext[17];
   	unsigned char buff_modified[32];
   	int i, k, ret;
@@ -166,13 +169,13 @@ void decrypt_block(unsigned char* buff, int failed_decrypt_byte, int &sockfd) {
     	printf("Updating padding to %d\n", target_padding_value);
     	changeByteRange(buff_modified, k, padding_value, target_padding_value ^ padding_value);
 
-    	Oracle_Connect(sockfd);
+    	Oracle_Connect();
     	printf("Starting to find i value which will successfully decrypt\n");
     	for (i = 0; i < 256; i++) {
       		printf(".");
       		fflush(stdout);
       		buff_modified[k - 1] = i;
-      		ret = Oracle_Send(buff_modified, 2, sockfd); // the first argument is an unsigned char array ctext;
+      		ret = Oracle_Send(buff_modified, 2); // the first argument is an unsigned char array ctext;
       		if (ret == 1) {
         		printf("Successfully decrypted with i = 0x%02X\n", i);
         		break;
@@ -182,14 +185,14 @@ void decrypt_block(unsigned char* buff, int failed_decrypt_byte, int &sockfd) {
     	printf("\n");
     	if (i == 256) {
       		printf("Did not find value which decrypted the cyphertext\n");
-      		Oracle_Disconnect(sockfd);
+      		Oracle_Disconnect();
       		exit(1);
     	}
     	plaintext[k - 1] = i ^ target_padding_value ^ buff[k - 1];
 
     	printf("Found plaintext value of: %c\n", plaintext[k - 1]);
   	}
-  	Oracle_Disconnect(sockfd);
+  	Oracle_Disconnect();
 
   	printf("final plaintext for block: %s\n", plaintext);
 }
