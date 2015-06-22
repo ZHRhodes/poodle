@@ -29,7 +29,7 @@
 
 #define CTEXT_LEN 48
 #define BUF_SIZE 4096
-#define PORT 6667
+#define PORT 5005
 #define BACKLOG 5
 
 void * connection_handler(void *sd);

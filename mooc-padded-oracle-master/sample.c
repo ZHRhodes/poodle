@@ -87,6 +87,10 @@ void decrypt_block(unsigned char* buff, int failed_decrypt_byte) {
   Oracle_Disconnect();
 
   printf("final plaintext for block: %s\n", plaintext);
+  FILE *fpOut;
+  fopen("ctext.txt", "w");
+  fprintf(fpOut, "%s", plaintext);
+  fclose(fpOut);
 }
 
 // Read a ciphertext from a file, send it to the server, and get back a result.
