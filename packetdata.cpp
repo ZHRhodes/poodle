@@ -1,8 +1,6 @@
 #include <string>
 #include <iostream>
 #include <fstream>
-#include <sstream>
-
 
 using namespace std;
 
@@ -13,17 +11,16 @@ string dataExtract(string file);
 
 int main(int argc, char* argv[]) {
 
-    string fname(argv[1]);
     string file;
 
-    file = dataExtract(fname);
+    file = dataExtract(argv[1]);
     cout << file << endl;   
     file = spaceClean(file);
     
     cout << "----------------" << endl
         << file << endl;
 
-    ofstream out(fname + "data");
+    ofstream out("cleanedpackeddata");
     
     out << file;
     out.close();
@@ -34,7 +31,7 @@ int main(int argc, char* argv[]) {
 
 string dataExtract(string fname) {
 
-    string file, line;
+    string file = "", line;
     ifstream in(fname);
     
     while( getline( in, line)) {

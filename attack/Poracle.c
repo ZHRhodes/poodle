@@ -10,7 +10,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <time.h>
-
+#include <errno.h>
 
 #define NOFLAGS 0
 #define BLOCK_LENGTH 16
@@ -71,8 +71,8 @@ int Oracle_Connect() {
 
   	bzero(&servaddr, sizeof(servaddr));
   	servaddr.sin_family = AF_INET;
-  	servaddr.sin_addr.s_addr=inet_addr("54.165.60.84");//54.165.60.84//10.46.118.128
-  	servaddr.sin_port=htons(6667);
+  	servaddr.sin_addr.s_addr=inet_addr("198.101.141.164");//54.165.60.84//10.46.118.128
+  	servaddr.sin_port=htons(443);
 
   	if(!connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr))) {
     	printf("Connected to server successfully.\n");
@@ -104,17 +104,19 @@ int Oracle_Send(unsigned char* ctext, int num_blocks) {
   	message[0] = num_blocks;
   	memcpy((message+1), ctext, ctext_len);
   	message[ctext_len+1] = '\0';
-
+        printf("sending...\n");
   	if(!send(sockfd, message, ctext_len+2, NOFLAGS)) {
     	perror("[WARNING]: You haven't connected to the server yet");
     	return -1;
   	}
+        printf("receiving...\n");
   	if(!recv(sockfd, recvbit, 2, NOFLAGS)) {
     	perror("[ERROR]: Recv failed");
+        printf("%d %d\n", recvbit[0], errno);
     	return -1;
   	}
   	recvbit[1] = '\0';
-
+        printf("%d: recvbit\n", recvbit[0]);
   	return atoi(recvbit);
 }
 
@@ -158,6 +160,8 @@ void decrypt_block(unsigned char* buff, int failed_decrypt_byte) {
   	sleep_interval.tv_sec = 0;
   	sleep_interval.tv_nsec = 250000000;
 
+        printf("In decrypt_block now...\n");
+
   	memset(plaintext, 0, sizeof(plaintext));
   	memcpy(buff_modified, buff, 32);
 
@@ -174,13 +178,18 @@ void decrypt_block(unsigned char* buff, int failed_decrypt_byte) {
     	for (i = 0; i < 256; i++) {
       		printf(".");
       		fflush(stdout);
+                printf("flushed...\n");
       		buff_modified[k - 1] = i;
+                printf("Sending oracle...\n");
       		ret = Oracle_Send(buff_modified, 2); // the first argument is an unsigned char array ctext;
+                printf("sent modified buffer...\n");
       		if (ret == 1) {
         		printf("Successfully decrypted with i = 0x%02X\n", i);
         		break;
       		}
+                printf("now sleeping...\n");
       		nanosleep(&sleep_interval, NULL);
+                printf("finished sleeping...\n");
     	}
     	printf("\n");
     	if (i == 256) {
